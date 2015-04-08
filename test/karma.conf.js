@@ -32,8 +32,8 @@ module.exports = function(config) {
       'bower_components/ng-multi-transclude/src/multi-transclude.js',
       'bower_components/underscore/underscore.js',
       // endbower
-      'app/scripts/**/*.js',
-      'test/mock/**/*.js',
+      'src/scripts/formation-helper.js',
+      'src/scripts/formation-parts.js',
       'test/spec/**/*.js'
     ],
 
@@ -42,7 +42,7 @@ module.exports = function(config) {
     ],
 
     // web server port
-    port: 8080,
+    port: 1234,
 
     // Start these browsers, currently available:
     // - Chrome
