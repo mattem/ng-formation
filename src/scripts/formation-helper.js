@@ -137,31 +137,5 @@ angular.module('ngFormation', [])
 		});
 	};
 
-	helper.evaluate = function(){
-		var _byPropertyName = function(outerDomain, properyName, innerPropertyIndex){
-			var deferred = $q.defer();
-			setTimeout(function(){
-				helper.describe(outerDomain).then(function(objDescriptor){
-					var pHolder = _.find(objDescriptor.propertyHolders, function(p){ return p.properyName === properyName });
-					console.log(pHolder);
-					var innerPHolder = pHolder.propertyTypeDescriptor.innerTypes[innerPropertyIndex];
-					console.log(innerPHolder);
-					_evaluate(objDescriptor, innerPHolder, innerPHolder.generalTypes[0]).then(function(propHtml){
-						var construct = {
-							descriptor: objDescriptor,
-							form: propHtml
-						};
-						deferred.resolve(construct);
-					});
-				});
-			});
-			return deferred.promise;
-		};
-
-		return{
-			byPropertyName: _byPropertyName
-		};
-	}();
-
 	return helper;
 }]);
