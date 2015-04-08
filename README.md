@@ -1,5 +1,7 @@
 # ng-formation
 
+[![Build Status](https://travis-ci.org/mattem/ng-formation.svg?branch=master)](https://travis-ci.org/mattem/ng-formation)
+
 > Formation is currently under development, so not all features listed may not work as advertised 
 
 ### What is ng-formation?
