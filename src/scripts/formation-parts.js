@@ -208,7 +208,7 @@ angular.module('ngFormation')
 				+'<div class="col-lg-10">'
 				  +'<div class="radio">'
 				    +'<label>'
-				      +'<input type="radio" checked ng-value="true">'
+				      +'<input type="radio" ng-value="true">'
 				      +'True'
 				    +'</label>'
 				  +'</div>'
@@ -221,7 +221,12 @@ angular.module('ngFormation')
 				+'</div>'
 			+'</div>',
 		replace: true,
-		link: function(scope, iElm, iAttrs, controller) {
+		compile: function(tElem, tAttrs){
+			return {
+				pre: function(scope, iElem, iAttrs){
+					iElem.find('input').prop('name', scope.label+'-'+uniqueId());
+				},
+			}
 		}
 	};
 }])                   
