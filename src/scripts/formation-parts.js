@@ -84,8 +84,6 @@ angular.module('ngFormation')
 									var $nestedTypeContainer = $(event.target.previousSibling);
 									var $nestedTypeHolder = $nestedTypeContainer.find('.formation-nested-type');
 
-									console.log(event, $nestedTypeContainer);
-
 									f.build($nestedTypeContainer.data('nestedTypeClass')).then(function(nestedConstruct){
 										$compile(nestedConstruct.form)(scope.$new(), function(nestedClone, nestedTypeScope){
 											childScopes.push(nestedTypeScope);
