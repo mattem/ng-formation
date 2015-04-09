@@ -18,7 +18,7 @@ angular.module('ngFormation')
 				+'</div>'
 				+'<div class="form-group" ng-if="domain">'
 					+'<div class="col-lg-10">'
-						+'<button type="button" class="btn btn-small btn-primary" ng-click="onSubmitClick()">Submit</button>'
+						+'<button type="submit" class="btn btn-small btn-primary" ng-click="onSubmitClick()">Submit</button>'
 					+'</div>'
 				+'</div>'
 			+'</fieldset>'
@@ -58,7 +58,8 @@ angular.module('ngFormation')
 								.append(cloneElement)
 								.unbind('click')
 								.on('click', '.formation-list-entry-btn-add', function(event){
-									$($(event.target.previousSibling).children('div#formation-list-entry-clean')[0].outerHTML)
+									$(event.target.previousSibling).children('div#formation-list-entry-clean')
+										.clone(true)
 										.prop('id', uniqueId())
 										.removeClass('formation-list-entry-clean')
 										.on('click', 'button.formation-list-entry-btn-remove', function(event) {
@@ -68,7 +69,8 @@ angular.module('ngFormation')
 										.appendTo($(event.target.previousSibling));
 								})
 								.on('click', '.formation-map-entry-btn-add', function(event){
-									$($(event.target.previousSibling).children('div#formation-map-entry-clean')[0].outerHTML)
+									$(event.target.previousSibling).children('div#formation-map-entry-clean')
+										.clone(true)
 										.prop('id', uniqueId())
 										.removeClass('formation-map-entry-clean')
 										.on('click', 'button.formation-map-entry-btn-remove', function(event) {
@@ -80,7 +82,9 @@ angular.module('ngFormation')
 								.on('click', '.formation-nested-type-btn-add', function(event){
 									var $nestedTypeAddBtn = $(this).hide();
 									var $nestedTypeContainer = $(event.target.previousSibling);
-									var $nestedTypeHolder = $nestedTypeContainer.find('.formation-nested-type')
+									var $nestedTypeHolder = $nestedTypeContainer.find('.formation-nested-type');
+
+									console.log(event, $nestedTypeContainer);
 
 									f.build($nestedTypeContainer.data('nestedTypeClass')).then(function(nestedConstruct){
 										$compile(nestedConstruct.form)(scope.$new(), function(nestedClone, nestedTypeScope){
@@ -89,7 +93,6 @@ angular.module('ngFormation')
 												.show()
 												.unbind()
 												.on('click', function(event) {
-													console.log(event);
 													$(this).hide();
 			  									$nestedTypeContainer.hide();
 			  									$nestedTypeHolder.empty();
@@ -151,6 +154,26 @@ angular.module('ngFormation')
 				console.log('********** Done serialize form **********', v);
 			};
 		},
+	};
+}])
+
+.directive('formationUnknown', ['formationService', function(f){
+	return {
+		name: 'formation-unknown',
+		scope: {
+			requestedType: '@'
+		},
+		template: ''
+			+'<div class="form-group">'
+				+'<div class="col-lg-10">'
+					+'<div class="well well-sm">'
+						+'<span><i class="glyphicon glyphicon-exclamation-sign"></i> {{requestedType}} is unknown</span>'
+					+'</div>'
+				+'</div>'
+			+'</div>',
+		replace: true,
+		link: function(scope, iElm, iAttrs, controller) {
+		}
 	};
 }])
 
