@@ -1,8 +1,32 @@
 angular.module('ngFormation', [])
 .factory('formationService', ['$http', '$cacheFactory', '$q', function($http, $cacheFactory, $q){
 
-	var _evaluate = function(objDescriptor, propertyHolder, type, typeDescriptor){
-		var deferred = $q.defer();
+	var objDescriptorCache, constructCache; 
+	(function(){
+		objDescriptorCache = $cacheFactory('objDescriptorCache', {capacity: 10});
+		constructCache = $cacheFactory('constructCache', {capacity:10});
+
+		objDescriptorCache.removeAll();
+		constructCache.removeAll();
+	})();
+
+	var _unknown = function(objDescriptor, domain){
+		return {
+			form: '<formation-unknown requested-type="'+domain+'"></formation-unknown>',
+			objDescriptor: objDescriptor
+		};
+	};
+
+	var _evaluate = function(typed, build){
+		var 
+			objDescriptor = typed.objDescriptor, 
+			propertyHolder = typed.propertyHolder, 
+			type = typed.type, 
+			typeDescriptor = typed.typeDescriptor, 
+			outerType = typed.outerType,
+			deferred = $q.defer(),
+			build = build || {};
+
 		setTimeout(function(){
 			console.debug('Evaluating property', propertyHolder, 'Using type ['+type+']');
 			var propHtml = '', generalType = propertyHolder.propertyGeneralType;
@@ -36,8 +60,14 @@ angular.module('ngFormation', [])
 					propHtml = ''
 					+'<formation-list label="'+propertyHolder.properyName+'" inner-type-name="'+typeDescriptor.innerTypes[0].generalTypes[0]+'">';
 					// now resolve inner types
-					_evaluate(objDescriptor, typeDescriptor.innerTypes[0], typeDescriptor.innerTypes[0].generalTypes[0], typeDescriptor.innerTypes[0])
-					.then(function(innerHtml){
+					var valueTyped = {
+							objDescriptor: objDescriptor, 
+							propertyHolder: typeDescriptor.innerTypes[0], 
+							type: typeDescriptor.innerTypes[0].generalTypes[0], 
+							typeDescriptor: typeDescriptor.innerTypes[0], 
+							outerType: type
+						};
+					_evaluate(valueTyped).then(function(innerHtml){
 						propHtml += innerHtml+'</formation-list>';
 						deferred.resolve(propHtml);
 					});
@@ -54,8 +84,22 @@ angular.module('ngFormation', [])
 					// resolve inner types
 					var 
 						innerTypeProms = [],
-						keyProm = _evaluate(objDescriptor, typeDescriptor.innerTypes[0], typeDescriptor.innerTypes[0].generalTypes[0], typeDescriptor.innerTypes[0]),
-						valueProm = _evaluate(objDescriptor, typeDescriptor.innerTypes[1], typeDescriptor.innerTypes[1].generalTypes[0], typeDescriptor.innerTypes[1]);
+						keyTyped = {
+							objDescriptor: objDescriptor, 
+							propertyHolder: typeDescriptor.innerTypes[0], 
+							type: typeDescriptor.innerTypes[0].generalTypes[0], 
+							typeDescriptor: typeDescriptor.innerTypes[0], 
+							outerType: type
+						},
+						valueTyped = {
+							objDescriptor: objDescriptor, 
+							propertyHolder: typeDescriptor.innerTypes[1], 
+							type: typeDescriptor.innerTypes[1].generalTypes[0], 
+							typeDescriptor: typeDescriptor.innerTypes[1], 
+							outerType: type,
+						},
+						keyProm = _evaluate(keyTyped),
+						valueProm = _evaluate(valueTyped);
 
 					innerTypeProms.push(keyProm, valueProm);
 					$q.all(innerTypeProms).then(function(innerHtmls){
@@ -77,13 +121,10 @@ angular.module('ngFormation', [])
 					});
 					break;
 				default:
-					// helper.build(type).then(function(construct){
-						
-					// });
 					var label = propertyHolder.properyName || '';
 					propHtml += ''
-					+'<formation-nested-type nested-type-name="'+label+'" label="'+label+'" nested-type-class="'+propertyHolder.propertyGeneralType+'">'
-					+'</formation-nested-type>'
+					+'<formation-nested-type nested-type-name="'+label+'" label="'+label+'" nested-type-class="'+type+'">'
+					+'</formation-nested-type>';
 					deferred.resolve(propHtml);
 					break;
 			}
@@ -99,35 +140,71 @@ angular.module('ngFormation', [])
 	helper.build = function(domain){
 		var deferred = $q.defer();
 		setTimeout(function(){
-			helper.describe(domain).then(function(objDescriptor){
-				var formHtml = [], proms = [];
-				
-				objDescriptor.propertyHolders.forEach(function(propertyHolder, index){
-					var evalPromise = _evaluate(objDescriptor, propertyHolder, propertyHolder.propertyGeneralType, propertyHolder.propertyTypeDescriptor)
-					.then(function(propHtml){
-						formHtml.push(propHtml);
+			if(angular.isUndefined(domain) || domain == 'undefined'){
+				deferred.resolve(_unknown());
+				return;
+			}
+			var construct = constructCache.get(domain);
+			if(angular.isDefined(construct)){
+				console.debug('Serving form for ['+domain+'] from cache');
+				deferred.resolve(construct);
+			}else{
+				helper.describe(domain).then(function(objDescriptor){
+					var formHtml = [], proms = [];
+					
+					objDescriptor.propertyHolders.forEach(function(propertyHolder, index){
+						var typed = {
+								objDescriptor: objDescriptor, 
+								propertyHolder: propertyHolder, 
+								type: propertyHolder.propertyGeneralType, 
+								typeDescriptor: propertyHolder.propertyTypeDescriptor, 
+								outerType: 'NONE',
+							},
+						evalPromise = _evaluate(typed)
+						.then(function(propHtml){
+							formHtml.push(propHtml);
+						});
+						proms.push(evalPromise);
 					});
-					proms.push(evalPromise);
-				});
 
-				$q.all(proms).then(function(){
-					var construct = {
-						descriptor: objDescriptor,
-						form: formHtml.join('')
-					};
-					deferred.resolve(construct);
-				});
+					$q.all(proms).then(function(){
+						var construct = {
+							descriptor: objDescriptor,
+							form: formHtml.join('')
+						};
+						deferred.resolve(construct);
 
-			});
+						console.debug('Caching form for ['+domain+']');
+						constructCache.put(domain, construct);
+					});
+
+				});
+			}
 		});
 		return deferred.promise;
 	};
 
 	helper.describe = function(domain){
-		return $http.get('http://localhost:8080/formation/describe/?object='+domain).then(function(data, status, headers, config){
-			console.debug(domain+' described as', data.data);
-			return data.data; 
+		var deferred = $q.defer();
+
+		setTimeout(function(){
+			if(angular.isUndefined(domain) || domain == 'undefined'){
+				deferred.reject();
+				return;
+			}
+			var objDescriptor = objDescriptorCache.get(domain);
+			if(angular.isDefined(objDescriptor)){
+				console.debug(domain+' found in cache, described as', objDescriptor);
+				deferred.resolve(objDescriptor);
+			}else{
+				$http.get('http://localhost:8080/formation/describe/?object='+domain).then(function(data, status, headers, config){
+					console.debug(domain+' described as', data.data);
+					deferred.resolve(data.data); 
+					objDescriptorCache.put(domain, data.data);
+				});
+			}
 		});
+		return deferred.promise;
 	};
 
 	helper.typesForCategory = function(category){
@@ -135,6 +212,13 @@ angular.module('ngFormation', [])
 			console.debug('Category ['+category+'] listed as', data.data);
 			return data.data;
 		});
+	};
+
+	helper.forget = function(){
+		console.debug('Formation forgetting from objDescriptorCache', objDescriptorCache.info());
+		objDescriptorCache.removeAll();
+		console.debug('Formation forgetting from constructCache', constructCache.info());
+		constructCache.removeAll();
 	};
 
 	return helper;
