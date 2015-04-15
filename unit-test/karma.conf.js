@@ -38,6 +38,7 @@ module.exports = function(config) {
 
       'src/scripts/formation-helper.js',
       'src/scripts/formation-parts.js',
+      'src/scripts/formation-utils.js',
       'unit-test/spec/**/*.js'
     ],
 
