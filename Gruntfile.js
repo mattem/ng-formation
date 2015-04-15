@@ -383,10 +383,20 @@ module.exports = function (grunt) {
     // Test settings
     karma: {
       unit: {
-        configFile: 'test/karma.conf.js',
+        configFile: 'unit-test/karma.conf.js',
         singleRun: true
       }
+    },
+
+    protractor: {
+      options: {
+        configFile: "e2e-tests/protractor.conf.js", // Default config file 
+        keepAlive: true,
+        noColor: false,
+        args: {}
+      }
     }
+    
   });
 
 

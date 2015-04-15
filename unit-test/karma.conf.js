@@ -32,9 +32,13 @@ module.exports = function(config) {
       'bower_components/ng-multi-transclude/src/multi-transclude.js',
       'bower_components/underscore/underscore.js',
       // endbower
+
+      // HTML Parser
+      'node_modules/htmlparser/lib/htmlparser.js',
+
       'src/scripts/formation-helper.js',
       'src/scripts/formation-parts.js',
-      'test/spec/**/*.js'
+      'unit-test/spec/**/*.js'
     ],
 
     // list of files / patterns to exclude

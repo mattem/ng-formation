@@ -10,11 +10,11 @@ angular.module('ngFormation')
 		controller: function($scope, $element, $attrs, $transclude) {},
 		restrict: 'E',
 		template: ''
-		+'<form class="form-horizontal" id="formationForm">'
+		+'<form class="form-horizontal formation-form">'
 			+'<fieldset>'
 				+'<legend>{{domain}}</legend>'
 				+'<div class="form-group">'
-					+'<div id="fcontainer"/>'
+					+'<div class="formation-form-container" id="fcontainer"/>'
 				+'</div>'
 				+'<div class="form-group" ng-if="domain">'
 					+'<div class="col-lg-10">'
@@ -25,7 +25,7 @@ angular.module('ngFormation')
 		+'</form>',
 		replace: true,
 		link: function(scope, iElm, iAttrs, controller) {
-			var childScopes = [];
+			scope.childScopes = [];
 
 			scope.$watch('domain', function(newValue, oldValue, scope) {
 				if(newValue !== oldValue){
@@ -33,13 +33,13 @@ angular.module('ngFormation')
 					console.time('formation-builder-timer');
 					
 				//***********************************************************************
-					if(childScopes.length > 0){
-						console.debug('Clearning old directive model', childScopes);
+					if(scope.childScopes.length > 0){
+						console.debug('Clearning old directive model', scope.childScopes);
 						iElm.find('div#fcontainer').empty();
-						childScopes.forEach(function(cScope, i){
+						scope.childScopes.forEach(function(cScope, i){
 							cScope.$destroy();
 						});
-						childScopes = [];
+						scope.childScopes = [];
 						scope.objDescriptor = undefined;
 					}
 				//************************************************************************
@@ -61,7 +61,7 @@ angular.module('ngFormation')
 									$(event.target.previousSibling).children('div#formation-list-entry-clean')
 										.clone(true)
 										.prop('id', uniqueId())
-										.removeClass('formation-list-entry-clean')
+										.removeClass('formation-clean')
 										.on('click', 'button.formation-list-entry-btn-remove', function(event) {
 	  									$(event.delegateTarget).remove();
 	  								})
@@ -83,10 +83,11 @@ angular.module('ngFormation')
 									var $nestedTypeAddBtn = $(this).hide();
 									var $nestedTypeContainer = $(event.target.previousSibling);
 									var $nestedTypeHolder = $nestedTypeContainer.find('.formation-nested-type');
+									var level = parseInt($nestedTypeContainer.data('level'));
 
-									f.build($nestedTypeContainer.data('nestedTypeClass')).then(function(nestedConstruct){
+									f.build($nestedTypeContainer.data('type'), {level: level+1}).then(function(nestedConstruct){
 										$compile(nestedConstruct.form)(scope.$new(), function(nestedClone, nestedTypeScope){
-											childScopes.push(nestedTypeScope);
+											scope.childScopes.push(nestedTypeScope);
 											$nestedTypeContainer.find('button.formation-nested-type-btn-remove')
 												.show()
 												.unbind()
@@ -106,14 +107,22 @@ angular.module('ngFormation')
 								.on('click', '.formation-interface-type-btn-add', function(event){
 									var 
 										$interfaceTypePicker = $(event.target.previousSibling).find('.formation-interface-type-picker'),
-										interfaceType = $interfaceTypePicker.val();
+										interfaceType = $interfaceTypePicker.val()
+										level = parseInt($(event.target.previousSibling).data('level'));
 
-									f.build(interfaceType).then(function(ifaceConstruct){
+										console.log(event, level);
+
+									f.build(interfaceType, {level: level+1}).then(function(ifaceConstruct){
 										$compile(ifaceConstruct.form)(scope.$new(), function(ifaceClone, ifaceScope){
-											childScopes.push(ifaceScope);
+											scope.childScopes.push(ifaceScope);
+											$(event.target.previousSibling).find('.formation-field')
+												.first()
+												.data('inner-type', f.utils.classFromLabel(interfaceType));
 											$(event.target.previousSibling).find('.formation-interface-type')
 												.empty()
-												.append(ifaceClone);
+												.append(ifaceClone)
+												.addClass('formation-'+interfaceType.replace(/\./g, '-'))
+												.addClass('formation-level-'+level);
 											$interfaceTypePicker.hide();
 											$interfaceTypeAddBtn = $(event.target).hide();
 											$(event.target.previousSibling).find('.formation-interface-type-container')
@@ -126,7 +135,8 @@ angular.module('ngFormation')
 										});
 									});
 								});
-							childScopes.push(cloneScope);
+							cloneScope.serializers = [];
+							scope.childScopes.push(cloneScope);
 							console.timeEnd('formation-compile-timer');
 						});
 						console.timeEnd('formation-builder-timer');
@@ -139,17 +149,13 @@ angular.module('ngFormation')
 			$scope.onSubmitClick = function(){
 				console.log('********** Starting serialize form **********');
 				console.time('formation-serialize-timer');
-				var v = {}, objDescriptor = $scope.objDescriptor;
-				v[objDescriptor.objectName] = {};
-				objDescriptor.propertyHolders.forEach(function(prop, i){
-					if(prop.hasOwnProperty('value')){
-						v[objDescriptor.objectName][prop.properyName] = prop.value;
-					}
-				});
-				$scope.value = v;
 
-				console.timeEnd('formation-serialize-timer');
-				console.log('********** Done serialize form **********', v);
+				f.serialize($element.find('.formation-form-container'), {level: 0}).then(function(obj){
+					console.log(obj);
+					$scope.value = obj;
+					console.timeEnd('formation-serialize-timer');
+					console.log('********** Done serialize form **********');
+				});
 			};
 		},
 	};
@@ -175,22 +181,32 @@ angular.module('ngFormation')
 	};
 }])
 
-.directive('formationString', ['formationService', function(f){
+.directive('formationString', ['formationService', '$q', function(f,$q){
 	return {
 		name: 'formation-string',
 		scope: {
 			label: '@',
-			placeholder: '@?'
+			placeholder: '@?',
+			level: '@'
 		},
 		template: ''
-			+'<div class="form-group">'
+			+'<div class="form-group formation-field-container formation-String" ng-class=[model.formationLevel]>'
 				+'<label class="col-lg-2 control-label" ng-if="label !== \'undefined\'">{{label}}</label>'
 				+'<div class="col-lg-10">'
-					+'<input type="text" class="form-control" placeholder="{{placeholder}}">'
+					+'<input type="text" class="form-control formation-field" placeholder="{{placeholder}}" ng-model="value">'
 				+'</div>'
 			+'</div>',
 		replace: true,
 		link: function(scope, iElm, iAttrs, controller) {
+			scope.model = {};
+			scope.model.formationLevel = 'formation-level-'+scope.level;
+			scope.uniqueId = uniqueId();
+			iElm.find('input.form-control.formation-field')
+				.data('type', 'String')
+				.data('label', scope.label);
+			iElm.find('.formation-field-container')
+				.data('type', 'String')
+				.data('level', scope.level);
 		}
 	};
 }])
@@ -200,19 +216,29 @@ angular.module('ngFormation')
 		name: 'formation-number',
 		scope: {
 			label: '@',
+			level: '@',
 			placeholder: '@?',
 			min: '@?',
 			max: '@?'
 		},
 		template: ''
-			+'<div class="form-group">'
+			+'<div class="form-group formation-field-container formation-Integer" ng-class="[model.formationLevel]">'
 				+'<label class="col-lg-2 control-label" ng-if="label !== \'undefined\'">{{label}}</label>'
 				+'<div class="col-lg-10">'
-					+'<input type="number" min="min" max="max" class="form-control" placeholder="{{placeholder}}">'
+					+'<input type="number" min="min" max="max" class="form-control formation-field" placeholder="{{placeholder}}" ng-model="value">'
 				+'</div>'
 			+'</div>',
 		replace: true,
 		link: function(scope, iElm, iAttrs, controller) {
+			scope.model = {};
+			scope.model.formationLevel = 'formation-level-'+scope.level;
+
+			iElm.find('input.form-control.formation-field')
+				.data('type', 'Integer')
+				.data('label', scope.label);
+			iElm.find('.formation-field-container')
+				.data('type', 'Integer')
+				.data('level', scope.level);
 		}
 	};
 }])
@@ -221,32 +247,43 @@ angular.module('ngFormation')
 	return {
 		name: 'formation-boolean',
 		scope: {
-			label: '@'
+			label: '@',
+			level: '@'
 		},
 		template: ''
-			+'<div class="form-group">'
+			+'<div class="form-group formation-field-container formation-Boolean" ng-class="model.formationLevel">'
 				+'<label class="col-lg-2 control-label">{{label}}</label>'
-				+'<div class="col-lg-10">'
+				+'<div class="col-lg-10 formation-field">'
 				  +'<div class="radio">'
 				    +'<label>'
-				      +'<input type="radio" ng-value="true">'
+				      +'<input type="radio" ng-value="true" value="true" ng-model="value">'
 				      +'True'
 				    +'</label>'
 				  +'</div>'
 				  +'<div class="radio">'
 				    +'<label>'
-				      +'<input type="radio" ng-value="false">'
+				      +'<input type="radio" ng-value="false" value="false" ng-model="value">'
 				      +'False'
 				    +'</label>'
 				  +'</div>'
 				+'</div>'
 			+'</div>',
 		replace: true,
-		compile: function(tElem, tAttrs){
+		compile: function(tElm, tAttrs){
 			return {
-				pre: function(scope, iElem, iAttrs){
-					iElem.find('input').prop('name', scope.label+'-'+uniqueId());
+				pre: function(scope, iElm, iAttrs){
+					iElm.find('input').prop('name', scope.label+'-'+uniqueId());
 				},
+				post: function(scope, iElm, iAttrs){
+					scope.model = {};
+        	scope.model.formationLevel = 'formation-level-'+scope.level;
+					iElm.find('.formation-field')
+						.data('type', 'Boolean')
+						.data('label', scope.label);
+					iElm.find('.formation-field-container')
+						.data('type', 'Boolean')
+						.data('level', scope.level);
+				}
 			}
 		}
 	};
@@ -257,20 +294,30 @@ angular.module('ngFormation')
 		name: 'formation-enum',
 		scope: {
 			label: '@',
-			values: '@'
+			values: '@',
+			level: '@'
 		},
 		template: ''
-			+'<div class="form-group">'
+			+'<div class="form-group formation-field-container formation-Enum" ng-class="[model.formationLevel]">'
 				+'<label class="col-lg-2 control-label">{{label}}</label>'
 				+'<div class="col-lg-10">'
-					+'<select class="form-control">'
+					+'<select class="form-control formation-field">'
 						+'<option ng-repeat="(k, v) in model.enums">{{v}}</option>'
 					+'</select>'
 				+'</div>'
 			+'</div>',
 		replace: true,
 		link: function(scope, iElm, iAttrs, controller) {
+			iElm.find('select.formation-field')
+				.data('type', 'Enum')
+				.data('label', scope.label);
+			iElm.find('.formation-field-container')
+				.data('level', scope.level)
+				.addClass('level', 'formation-level-'+scope.level)
+				.data('type', 'Enum');
+
 			scope.model = {};
+			scope.model.formationLevel = 'formation-level-'+scope.level;
 			scope.$watch('values', function(newValue, oldValue, scope){
 				if(angular.isDefined(newValue)){
 					scope.model.enums = newValue.split(',');
@@ -289,14 +336,14 @@ angular.module('ngFormation')
 			keyLabel: '@',
 			keyDomain: '@',
 			valueLabel: '@',
-			valueDomain: '@'
+			valueDomain: '@',
+			level: '@'
 		},
 		template: ''
-			+'<div class="form-group">'
+			+'<div class="form-group formation-field-container formation-Map" ng-class="[model.formationLevel]">'
 				+'<label class="col-lg-2 control-label">{{label}}</label>'
 					+'<div class="col-lg-10">'
-						+'<div class="formation-map-entry-container">'
-
+						+'<div class="formation-map-entry-container formation-field">'
 							+'<div class="well well-sm" id="formation-map-entry-clean" ng-multi-transclude-controller>'
 								+'<div class="row">'
 									+'<div class="col-lg-12">'
@@ -310,7 +357,7 @@ angular.module('ngFormation')
 									+'<div class="col-lg-12">'
 										+'<span control-label">{{valueLabel}}</span>'
 										+'<div id="formation-map-value-input">'
-											+'<div ng-multi-transclude="valueInputEle"></div>'
+											+'<div ng-multi-transclude="valueInputEle" ng-class="\'formation-map-value-input\'"></div>'
 										+'</div>'
 									+'</div>'
 								+'</div>'
@@ -318,7 +365,6 @@ angular.module('ngFormation')
 									+'<span class="glyphicon glyphicon-minus-sign"></span> Remove'
 								+'</button>'
 							+'</div>'
-
 						+'</div>'
 						+'<button type="button" class="btn btn-xs btn-primary formation-map-entry-btn-add">'
 							+'<span class="glyphicon glyphicon-plus-sign"></span> Add Entry'
@@ -328,14 +374,24 @@ angular.module('ngFormation')
 			+'</div>',
 		replace: true,
 		transclude: true,
-		compile: function(tElem, tAttrs){
-			tElem.find('div.formation-map-entry-container').prop('id',  uniqueId())
-			tElem.find('div.formation-map-entry-clean').prop('id',  uniqueId());
+		compile: function(tElm, tAttrs){
+			tElm.find('div.formation-map-entry-container').prop('id',  uniqueId())
+			tElm.find('div.formation-map-entry-clean').prop('id',  uniqueId());
 			return {
-				pre: function(scope, iElem, iAttrs){
+				pre: function(scope, iElm, iAttrs){
 				},
-        post: function(scope, iElem, iAttrs){
-        	iElem.find('div#formation-map-entry-clean').hide();
+        post: function(scope, iElm, iAttrs){
+        	scope.model = {};
+        	scope.model.formationLevel = 'formation-level-'+scope.level;
+        	iElm.find('div#formation-map-entry-clean').hide();
+
+        	iElm.find('.formation-field').first()
+						.data('type', 'Map')
+						.data('label', scope.label)
+						.data('inner-key-type', scope.keyDomain)
+						.data('inner-key-label', scope.keyLabel)
+						.data('inner-value-type', scope.valueDomain)
+						.data('inner-value-label', scope.valueLabel);
         }
       };
 		},
@@ -347,15 +403,15 @@ angular.module('ngFormation')
 		name: 'formation-list',
 		scope: {
 			label: '@',
-			innerTypeName: '@'
+			innerTypeName: '@',
+			level: '@'
 		},
 		template: ''
-			+'<div class="form-group">'
+			+'<div class="form-group formation-field-container formation-List" ng-class="[model.formationLevel]">'
 				+'<label class="col-lg-2 control-label" ng-if="label">{{label}}</label>'
 					+'<div class="col-lg-10">'
-						+'<div class="formation-list-entry-container">'
-
-							+'<div class="well well-sm" id="formation-list-entry-clean">'
+						+'<div class="formation-list-entry-container formation-field">'
+							+'<div class="well well-sm formation-clean" id="formation-list-entry-clean">'
 								+'<div class="row">'
 									+'<div class="col-lg-12">'
 										+'<div ng-transclude></div>'
@@ -365,24 +421,34 @@ angular.module('ngFormation')
 									+'<span class="glyphicon glyphicon-minus-sign"></span> Remove'
 								+'</button>'
 							+'</div>'
-
 						+'</div>'
 						+'<button type="button" class="btn btn-xs btn-primary formation-list-entry-btn-add">'
-							+'<span class="glyphicon glyphicon-plus-sign"></span> Add {{innerTypeName}}'
+							+'<span class="glyphicon glyphicon-plus-sign"></span> Add {{model.addBtnLabel}} Entry'
 						+'</button>'
 					+'</div>'
 				+'</div>'
 			+'</div>',
 		replace: true,
 		transclude: true,
-		compile: function(tElem, tAttrs){
-			tElem.find('div.formation-list-entry-container').prop('id',  uniqueId())
-			tElem.find('div.formation-list-entry-clean').prop('id',  uniqueId());
+		compile: function(tElm, tAttrs){
+			tElm.find('div.formation-list-entry-container').prop('id',  uniqueId())
+			tElm.find('div.formation-list-entry-clean').prop('id',  uniqueId());
 			return {
-				pre: function(scope, iElem, iAttrs){
+				pre: function(scope, iElm, iAttrs){
 				},
-        post: function(scope, iElem, iAttrs){
-					iElem.find('div#formation-list-entry-clean').hide();
+        post: function(scope, iElm, iAttrs){
+        	scope.model = {};
+        	scope.model.formationLevel = 'formation-level-'+scope.level;
+        	scope.model.addBtnLabel = f.utils.labelFromClass(scope.innerTypeName);
+        	iElm.find('.formation-field').first()
+						.data('type', 'List')
+						.data('inner-type', scope.innerTypeName)
+						.data('label', scope.label);
+					iElm.find('.formation-field-container').first()
+						.data('level', scope.level)
+						.addClass('level', 'formation-level-'+scope.level)
+						.data('type', 'List');
+					iElm.find('div#formation-list-entry-clean').hide();
         }
       };
 		},
@@ -395,15 +461,16 @@ angular.module('ngFormation')
 		scope: {
 			label: '@',
 			nestedTypeName: '@',
-			nestedTypeClass: '@'
+			nestedTypeClass: '@',
+			level: '@'
 		},
 		template: ''
-			+'<div class="form-group">'
+			+'<div class="form-group formation-field-container" ng-class="[model.formationLevel, model.formationNestedTypeClass]">'
 				+'<label class="col-lg-2 control-label" ng-if="label">{{label}}</label>'
 					+'<div class="col-lg-10">'
 						+'<div class="formation-nested-type-container">'
 
-							+'<div class="well well-sm">'
+							+'<div class="well well-sm formation-field">'
 								+'<div class="row">'
 									+'<div class="col-lg-12">'
 										+'<div class="formation-nested-type"></div>'
@@ -416,22 +483,34 @@ angular.module('ngFormation')
 
 						+'</div>'
 						+'<button type="button" class="btn btn-xs btn-primary formation-nested-type-btn-add">'
-							+'<span class="glyphicon glyphicon-plus-sign"></span> Add {{nestedTypeName}}'
+							+'<span class="glyphicon glyphicon-plus-sign"></span> Add {{label}}'
 						+'</button>'
 					+'</div>'
 				+'</div>'
 			+'</div>',
 		replace: true,
 		transclude: true,
-		compile: function(tElem, tAttrs){
-			tElem.find('div.formation-nested-type-container').prop('id',  uniqueId())
+		compile: function(tElm, tAttrs){
+			tElm.find('div.formation-nested-type-container').prop('id',  uniqueId())
 			return {
-				pre: function(scope, iElem, iAttrs){
+				pre: function(scope, iElm, iAttrs){
+					scope.model = {};
+					scope.model.formationNestedTypeClass = 'formation-'+scope.nestedTypeClass.replace(/\./g, '-');
+					scope.model.formationLevel = 'formation-level-'+scope.level;
 				},
-        post: function(scope, iElem, iAttrs){
-					iElem.find('div.formation-nested-type-container')
+        post: function(scope, iElm, iAttrs){
+					iElm.find('div.formation-nested-type-container')
 						.hide()
-						.data('nestedTypeClass', scope.nestedTypeClass);
+						.data('level', scope.level)
+						.data('type', scope.nestedTypeClass);
+
+					iElm.find('.formation-field').first()
+						.data('label', scope.label)
+						.data('type', scope.nestedTypeClass);
+
+					iElm.find('.formation-field-container').first()
+						.data('type', scope.nestedTypeClass)
+						.data('level', scope.level)
         }
       };
 		},
@@ -444,10 +523,11 @@ angular.module('ngFormation')
 		scope: {
 			label: '@',
 			types: '@',
-			names: '@'
+			names: '@',
+			level: '@'
 		},
 		template: ''
-			+'<div class="form-group">'
+			+'<div class="form-group formation-field-container formation-Interface" ng-class="[model.formationLevel, model.formationNestedTypeClass]">'
 				+'<label class="col-lg-2 control-label" ng-if="label">{{label}}</label>'
 					+'<div class="col-lg-10">'
 						+'<div class="formation-interface-grouping-container">'
@@ -458,7 +538,7 @@ angular.module('ngFormation')
 									+'</select>'
 								+'</div>'
 							+'</div>'
-							+'<div class="formation-interface-type-container">'
+							+'<div class="formation-interface-type-container formation-field">'
 								+'<div class="well well-sm">'
 									+'<div class="row">'
 										+'<div class="col-lg-12">'
@@ -479,14 +559,24 @@ angular.module('ngFormation')
 			+'</div>',
 		replace: true,
 		transclude: true,
-		compile: function(tElem, tAttrs){
-			tElem.find('div.formation-interface-type-container').prop('id',  uniqueId())
+		compile: function(tElm, tAttrs){
+			tElm.find('div.formation-interface-type-container').prop('id',  uniqueId())
 			return {
-				pre: function(scope, iElem, iAttrs){
+				pre: function(scope, iElm, iAttrs){
 				},
-        post: function(scope, iElem, iAttrs){
-					iElem.find('div.formation-interface-type-container').hide();
-					scope.model = { types: scope.types.split(','), names: scope.names.split(',') }
+        post: function(scope, iElm, iAttrs){
+					iElm.find('div.formation-interface-type-container').hide();
+					scope.model = { types: scope.types.split(','), names: scope.names.split(',') };
+				//	scope.model.formationNestedTypeClass = 'formation-'+scope.nestedTypeClass.replace(/\./g, '-');
+					scope.model.formationLevel = 'formation-level-'+scope.level;
+
+					iElm.find('.formation-field').first()
+						.data('label', scope.label)
+						.data('type', 'Interface');
+
+					iElm.find('.formation-interface-grouping-container').first()
+						//.data('type', scope.nestedTypeClass)
+						.data('level', scope.level)
         }
       };
 		},

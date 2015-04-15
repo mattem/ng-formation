@@ -1,5 +1,6 @@
 angular.module('ngFormation', [])
-.factory('formationService', ['$http', '$cacheFactory', '$q', function($http, $cacheFactory, $q){
+.factory('formationService', ['formationUtils', '$http', '$cacheFactory', '$q', '$timeout', 
+function(fUtils, $http, $cacheFactory, $q, $timeout){
 
 	var objDescriptorCache, constructCache; 
 	(function(){
@@ -17,7 +18,7 @@ angular.module('ngFormation', [])
 		};
 	};
 
-	var _evaluate = function(typed, build){
+	var _evaluate = function(typed, options){
 		var 
 			objDescriptor = typed.objDescriptor, 
 			propertyHolder = typed.propertyHolder, 
@@ -25,40 +26,41 @@ angular.module('ngFormation', [])
 			typeDescriptor = typed.typeDescriptor, 
 			outerType = typed.outerType,
 			deferred = $q.defer(),
-			build = build || {};
+			level = options.level;
 
-		setTimeout(function(){
+		$timeout(function(){
 			console.debug('Evaluating property', propertyHolder, 'Using type ['+type+']');
 			var propHtml = '', generalType = propertyHolder.propertyGeneralType;
 			switch(type){
 				case 'String':
 					propHtml = '' 
-					+'<formation-string label="'+propertyHolder.properyName+'" placeholder="'+propertyHolder.properyName+'">'
+					+'<formation-string label="'+propertyHolder.properyName+'" placeholder="'+propertyHolder.properyName+'" level="'+level+'">'
 					+'</formation-string>';
 					deferred.resolve(propHtml);
 					break;
 				case 'Boolean':
 					propHtml = ''
-					+'<formation-boolean label="'+propertyHolder.properyName+'"></formation-boolean>';
+					+'<formation-boolean label="'+propertyHolder.properyName+'" level="'+level+'"></formation-boolean>';
 					deferred.resolve(propHtml);
 					break;
 				case 'Integer':
 				case 'Long':
 					propHtml = '' 
-					+'<formation-number label="'+propertyHolder.properyName+'" placeholder="0"></formation-number>';
+					+'<formation-number label="'+propertyHolder.properyName+'" placeholder="0" level="'+level+'"></formation-number>';
 					deferred.resolve(propHtml);
 					break;
 				case 'Enum':
 					var values = propertyHolder.objectPropertyDescriptor.values.join();
 					propHtml = ''
-					+'<formation-enum label="'+propertyHolder.properyName+'" values="'+values+'">'
+					+'<formation-enum label="'+propertyHolder.properyName+'" values="'+values+'" level="'+level+'">'
 					+'</formation-enum>';
 					deferred.resolve(propHtml);
 					break;
 				case 'List':
-					var oPropDesc = propertyHolder.objectPropertyDescriptor;
+					var oPropDesc = propertyHolder.objectPropertyDescriptor,
+					label = propertyHolder.properyName || typeDescriptor.innerTypes[0].generalTypes[0];
 					propHtml = ''
-					+'<formation-list label="'+propertyHolder.properyName+'" inner-type-name="'+typeDescriptor.innerTypes[0].generalTypes[0]+'">';
+					+'<formation-list label="'+label+'" inner-type-name="'+typeDescriptor.innerTypes[0].generalTypes[0]+'" level="'+level+'">';
 					// now resolve inner types
 					var valueTyped = {
 							objDescriptor: objDescriptor, 
@@ -67,7 +69,7 @@ angular.module('ngFormation', [])
 							typeDescriptor: typeDescriptor.innerTypes[0], 
 							outerType: type
 						};
-					_evaluate(valueTyped).then(function(innerHtml){
+					_evaluate(valueTyped, {level: level+1}).then(function(innerHtml){
 						propHtml += innerHtml+'</formation-list>';
 						deferred.resolve(propHtml);
 					});
@@ -79,7 +81,8 @@ angular.module('ngFormation', [])
 					propHtml = ''
 					+'<formation-map outer-domain="'+objDescriptor.objectName+'" label="'+label+'" '
 					+'key-label="'+oPropDesc.mapKeyLabel+'" value-label="'+oPropDesc.mapValueLabel+'" '
-					+' key-domain="'+typeDescriptor.innerTypes[0].generalTypes[0]+'" value-domain="'+typeDescriptor.innerTypes[1].generalTypes[0]+'">'
+					+' key-domain="'+typeDescriptor.innerTypes[0].generalTypes[0]+'" value-domain="'+typeDescriptor.innerTypes[1].generalTypes[0]+'" '
+					+'level="'+level+'">';
 					
 					// resolve inner types
 					var 
@@ -98,8 +101,8 @@ angular.module('ngFormation', [])
 							typeDescriptor: typeDescriptor.innerTypes[1], 
 							outerType: type,
 						},
-						keyProm = _evaluate(keyTyped),
-						valueProm = _evaluate(valueTyped);
+						keyProm = _evaluate(keyTyped, {level: level+1}),
+						valueProm = _evaluate(valueTyped, {level: level+1});
 
 					innerTypeProms.push(keyProm, valueProm);
 					$q.all(innerTypeProms).then(function(innerHtmls){
@@ -115,15 +118,16 @@ angular.module('ngFormation', [])
 						classes = classes.join();
 						names = names.join();
 						propHtml = ''
-						+'<formation-interface label="'+propertyHolder.properyName+'" names="'+names+'" types="'+classes+'">'
+						+'<formation-interface label="'+propertyHolder.properyName+'" names="'+names+'" types="'+classes+'" level="'+level+'">'
 						+'</formation-interface>';
 						deferred.resolve(propHtml);
 					});
 					break;
 				default:
-					var label = propertyHolder.properyName || '';
+					var label = propertyHolder.properyName || type;
+					label = fUtils.labelFromClass(label);
 					propHtml += ''
-					+'<formation-nested-type nested-type-name="'+label+'" label="'+label+'" nested-type-class="'+type+'">'
+					+'<formation-nested-type nested-type-name="'+label+'" label="'+label+'" nested-type-class="'+type+'" level="'+level+'">'
 					+'</formation-nested-type>';
 					deferred.resolve(propHtml);
 					break;
@@ -132,14 +136,194 @@ angular.module('ngFormation', [])
 		return deferred.promise;
 	};
 
-	var _forType = function(){
-
+	var _processContainer = function($container, options){
+		var d = $q.defer();
+		$timeout(function(){
+			console.debug('Processing container', $container, 'with options', options);
+			$field = $container.find('.formation-field').not('.formation-clean').not(':hidden').first();
+			console.debug('Using field', $field);
+			_serializeField($field, options).then(function(prop){
+				d.resolve(prop);
+			});
+		});
+		return d.promise;
 	};
 
-	var helper = {};
-	helper.build = function(domain){
+	var _defaultOptions = {wrapped: true};
+	var _serializeField = function($field, options){
 		var deferred = $q.defer();
-		setTimeout(function(){
+		$timeout(function(){
+			options = $.extend({}, _defaultOptions, options);
+			
+			console.debug('Starting to process ['+$field[0]+'] Using options', options);
+
+			var type = $field.data('type'), obj = {label: '', value:''};
+			if(angular.isUndefined(type)){
+				deferred.resolve({});
+				return;
+			}
+
+			console.debug('Found data type ['+type+'] on field');
+			switch(type){
+				case 'String':
+					obj.label = $field.data('label');
+					obj.value = $field.val();
+					deferred.resolve(obj);
+					break;
+				case 'Integer':
+					obj.label = $field.data('label');
+					obj.value = parseInt($field.val(), 10);
+					deferred.resolve(obj);
+					break;
+				case 'Boolean':
+					obj.label = $field.data('label');
+					obj.value = ($field.find('input[type="radio"]:checked').val() === 'true');
+					deferred.resolve(obj);
+					break;
+				case 'Enum':
+					obj.label = $field.data('label');
+					obj.value = $field.find('option:selected').val();
+					deferred.resolve(obj);
+					break;
+				case 'List':
+					obj.value = [];
+					obj.label = $field.data('label');
+					var 
+						innerType = $field.data('inner-type'),
+						level = parseInt(options.level) + 1,
+						$containers = $field.find('.formation-field-container.formation-'+innerType.replace(/\./g, '-')+'.formation-level-'+level),
+						proms = [];
+					
+					$containers.each(function(i, elm){
+						var $container = $(elm);
+						if($container.is(':visible')){
+							var op = {level: level};
+							var p = _processContainer($container, op);
+							proms.push(p);
+						}
+					});
+					$q.all(proms).then(function(ar){
+						ar.forEach(function(item){
+							obj.value.push(item.value);
+						});
+						deferred.resolve(obj);
+					});
+					break;
+				case 'Map':
+					obj.value = {};
+					obj.label = $field.data('label');
+					var 
+						innerKeyType = $field.data('inner-key-type'),
+						innerValueType = $field.data('inner-value-type')
+						level = parseInt(options.level) + 1,
+						$keyContainers = $field.find('#formation-map-key-input:visible')
+							.find('.formation-field-container.formation-'+innerKeyType.replace(/\./g, '-')+'.formation-level-'+level+':visible'),
+						$valueContainers = $field.find('#formation-map-value-input:visible')
+							.find('.formation-field-container.formation-'+innerValueType.replace(/\./g, '-')+'.formation-level-'+level+':visible');
+
+					if($keyContainers.length == 0){
+						deferred.resolve(obj);
+						return; 
+					}
+
+					var _numProps = function(cObj){
+						var count = 0;
+						for(var k in cObj){if(cObj.hasOwnProperty(k)) count++;}
+						return count;
+					};
+
+					var _processKeyValuePair = function($kElm, $vElm, $valueContainers, options){
+						if($kElm.is(':visible') && $vElm.is(':visible')){
+							_processContainer($kElm, options).then(function(keyItem){
+								_processContainer($vElm, options).then(function(valueItem){
+									obj.value[keyItem.value] = valueItem.value;
+									if(_numProps(obj.value) == $valueContainers.length){
+										deferred.resolve(obj);
+									}
+								});
+							});
+						}
+					};
+
+					var _processKeyValueContainers = function($keyContainers, $valueContainers){
+						var i = 0, op = {level: level, wrapped: false};
+						while(i < $keyContainers.length){
+							var 
+								$kElm = $($keyContainers[i]),
+								$vElm = $($valueContainers[i]);
+							_processKeyValuePair($kElm, $vElm, $valueContainers, op);
+							i++;
+						};
+					};
+					_processKeyValueContainers($keyContainers, $valueContainers);
+					break;
+				case 'Interface':
+					obj.value = {};
+					obj.label = fUtils.simpleClassFromClass($field.data('inner-type'));
+
+					var 
+						innerType = $field.data('inner-type'),
+						level = parseInt(options.level)+1,
+						$containers = $field.find('.formation-field-container.formation-level-'+level),
+						proms = [];
+
+					//obj.value[innerType] = {};
+
+					$containers.each(function(i, elm){
+						var $container = $(elm);
+						if($container.is(':visible')){
+							var op = {level: level, wrapped: options.wrapped};
+							proms.push(_processContainer($container, op));
+						}
+					});
+					$q.all(proms).then(function(ar){
+						ar.forEach(function(item){
+							if(options.wrapped){
+								obj.value[item.label] = item.value;
+							}else{
+								obj.value = item.value;
+							}
+						});
+						deferred.resolve(obj);
+					});
+
+					break;
+				default:
+					obj.value = {};
+					obj.label = $field.data('label');
+					var 
+						level = parseInt(options.level) + 1,
+						nestedType = $field.data('nested-type'), 
+						$containers = $field.find('.formation-field-container.formation-level-'+level),
+						proms = [];
+
+					$containers.each(function(i, elm){
+						var $container = $(elm);
+						if($container.is(':visible')){
+							var op = {level: level, wrapped: options.wrapped};
+							proms.push(_processContainer($container, op));
+						}
+					});
+					$q.all(proms).then(function(ar){
+						ar.forEach(function(item){
+							if(options.wrapped){
+								obj.value[item.label] = item.value;
+							}else{
+								obj.value = item.value;
+							}
+						});
+						deferred.resolve(obj);
+					});
+					break;
+			};
+		});
+		return deferred.promise;
+	};
+
+	var helper = {utils: fUtils};
+	helper.build = function(domain, options){
+		var deferred = $q.defer();
+		$timeout(function(){
 			if(angular.isUndefined(domain) || domain == 'undefined'){
 				deferred.resolve(_unknown());
 				return;
@@ -160,7 +344,11 @@ angular.module('ngFormation', [])
 								typeDescriptor: propertyHolder.propertyTypeDescriptor, 
 								outerType: 'NONE',
 							},
-						evalPromise = _evaluate(typed)
+
+						ops = {};
+						ops.level = options ? options.level : 0;
+
+						var evalPromise = _evaluate(typed, ops)
 						.then(function(propHtml){
 							formHtml.push(propHtml);
 						});
@@ -174,8 +362,8 @@ angular.module('ngFormation', [])
 						};
 						deferred.resolve(construct);
 
-						console.debug('Caching form for ['+domain+']');
-						constructCache.put(domain, construct);
+						//console.debug('Caching form for ['+domain+']');
+						//constructCache.put(domain, construct);
 					});
 
 				});
@@ -184,10 +372,28 @@ angular.module('ngFormation', [])
 		return deferred.promise;
 	};
 
+	helper.serialize = function($form, options){
+		var deferred = $q.defer(), obj = {}, proms = [];
+		$timeout(function(){
+			$form.children('.formation-field-container').each(function(i,elm){
+				var p = _processContainer($(elm), options);
+				p.then(function(prop){
+					if(angular.isDefined(prop) && prop.hasOwnProperty('label') && prop.hasOwnProperty('value'))
+						obj[prop.label] = prop.value;
+				});
+				proms.push(p);
+			});
+			$q.all(proms).then(function(){
+				deferred.resolve(obj);
+			});
+		});
+		return deferred.promise;
+	};
+
 	helper.describe = function(domain){
 		var deferred = $q.defer();
 
-		setTimeout(function(){
+		$timeout(function(){
 			if(angular.isUndefined(domain) || domain == 'undefined'){
 				deferred.reject();
 				return;
