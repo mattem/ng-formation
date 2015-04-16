@@ -2,15 +2,12 @@ angular.module('ngFormation', [])
 .factory('formationService', ['formationUtils', '$http', '$cacheFactory', '$q', '$timeout', 
 function(fUtils, $http, $cacheFactory, $q, $timeout){
 
-	var objDescriptorCache, constructCache, objListCache;
+	var objDescriptorCache, constructCache, objListCache, categoryCache;
 	(function(){
 		objDescriptorCache = $cacheFactory('objDescriptorCache', {capacity: 10});
 		constructCache = $cacheFactory('constructCache', {capacity:10});
 		objListCache = $cacheFactory('objListCache', {capacity:1});
-
-		objDescriptorCache.removeAll();
-		constructCache.removeAll();
-		objListCache.removeAll();
+		categoryCache = $cacheFactory('categoryCache', {capacity:20});
 	})();
 
 	var _unknown = function(objDescriptor, domain){
@@ -416,18 +413,43 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 	};
 
 	helper.typesForCategory = function(category){
-		return $http.get('http://localhost:8080/formation/category/?category='+category).then(function(data, status, headers, config){
-			console.debug('Category ['+category+'] listed as', data.data);
-			return data.data;
+		var deferred = $q.defer();
+		$timeout(function(){
+			if(angular.isUndefined(category)){
+				deferred.reject();
+				return;
+			}
+			var cat = categoryCache.get(category);
+			if(angular.isDefined(cat)){
+				console.debug(category+' found in cache as', cat);
+				deferred.resolve(cat);
+			}else{
+				$http.get('http://localhost:8080/formation/category/?category='+category).then(function(data, status, headers, config){
+					console.debug('Category ['+category+'] listed as', data.data);
+					categoryCache.put(category, data.data);
+					deferred.resolve(data.data);
+				});
+			}
 		});
+		return deferred.promise;
 	};
 
 	helper.all = function(){
-		return $http.get('http://localhost:8080/formation/list').then(function(data, status, headers, config){
-			console.log('Got formation object list:', data.data);
-			objListCache.put('objects', data.data);
-			return data.data;
-  	});
+		var deferred = $q.defer();
+		$timeout(function(){
+			var all = objListCache.get('objects');
+			if(angular.isDefined(all)){
+				console.log('Found all in cache as', all);
+				deferred.resolve(all);
+			}else{
+				$http.get('http://localhost:8080/formation/list').then(function(data, status, headers, config){
+					console.log('Got formation object list:', data.data);
+					deferred.resolve(data.data);
+					objListCache.put('objects', data.data);
+		  	});
+			}
+		});
+		return deferred.promise;
 	};
 
 	helper.forget = function(){
