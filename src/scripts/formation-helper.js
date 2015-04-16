@@ -2,13 +2,15 @@ angular.module('ngFormation', [])
 .factory('formationService', ['formationUtils', '$http', '$cacheFactory', '$q', '$timeout', 
 function(fUtils, $http, $cacheFactory, $q, $timeout){
 
-	var objDescriptorCache, constructCache; 
+	var objDescriptorCache, constructCache, objListCache;
 	(function(){
 		objDescriptorCache = $cacheFactory('objDescriptorCache', {capacity: 10});
 		constructCache = $cacheFactory('constructCache', {capacity:10});
+		objListCache = $cacheFactory('objListCache', {capacity:1});
 
 		objDescriptorCache.removeAll();
 		constructCache.removeAll();
+		objListCache.removeAll();
 	})();
 
 	var _unknown = function(objDescriptor, domain){
@@ -418,6 +420,14 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 			console.debug('Category ['+category+'] listed as', data.data);
 			return data.data;
 		});
+	};
+
+	helper.all = function(){
+		return $http.get('http://localhost:8080/formation/list').then(function(data, status, headers, config){
+			console.log('Got formation object list:', data.data);
+			objListCache.put('objects', data.data);
+			return data.data;
+  	});
 	};
 
 	helper.forget = function(){
