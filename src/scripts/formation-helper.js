@@ -2,17 +2,16 @@ angular.module('ngFormation', [])
 .factory('formationService', ['formationUtils', '$http', '$cacheFactory', '$q', '$timeout', 
 function(fUtils, $http, $cacheFactory, $q, $timeout){
 
-	var objDescriptorCache, constructCache, objListCache, categoryCache;
+	var objDescriptorCache, objListCache, categoryCache;
 	(function(){
 		objDescriptorCache = $cacheFactory('objDescriptorCache', {capacity: 10});
-		constructCache = $cacheFactory('constructCache', {capacity:10});
 		objListCache = $cacheFactory('objListCache', {capacity:1});
 		categoryCache = $cacheFactory('categoryCache', {capacity:20});
 	})();
 
 	var _unknown = function(objDescriptor, domain){
 		return {
-			form: '<formation-unknown requested-type="'+domain+'"></formation-unknown>',
+			form: fUtils.Unknown(),
 			objDescriptor: objDescriptor
 		};
 	};
@@ -29,39 +28,26 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 
 		$timeout(function(){
 			console.debug('Evaluating property', propertyHolder, 'Using type ['+type+']');
-			var propHtml = '', generalType = propertyHolder.propertyGeneralType;
 			switch(type){
 				case 'String':
-					propHtml = '' 
-					+'<formation-string label="'+propertyHolder.properyName+'" placeholder="'+propertyHolder.properyName+'" level="'+level+'">'
-					+'</formation-string>';
-					deferred.resolve(propHtml);
+					deferred.resolve(fUtils.String(level, propertyHolder.properyName, propertyHolder.properyName));
 					break;
 				case 'Boolean':
-					propHtml = ''
-					+'<formation-boolean label="'+propertyHolder.properyName+'" level="'+level+'"></formation-boolean>';
-					deferred.resolve(propHtml);
+					deferred.resolve(fUtils.Boolean(level, propertyHolder.properyName));
 					break;
 				case 'Integer':
 				case 'Long':
-					propHtml = '' 
-					+'<formation-number label="'+propertyHolder.properyName+'" placeholder="0" level="'+level+'"></formation-number>';
-					deferred.resolve(propHtml);
+				case 'Short':
+				case 'Float':
+					deferred.resolve(fUtils.Number(level, propertyHolder.properyName, '0'));
 					break;
 				case 'Enum':
-					var values = propertyHolder.objectPropertyDescriptor.values.join();
-					propHtml = ''
-					+'<formation-enum label="'+propertyHolder.properyName+'" values="'+values+'" level="'+level+'">'
-					+'</formation-enum>';
-					deferred.resolve(propHtml);
+					deferred.resolve(fUtils.Enum(level, propertyHolder.properyName, propertyHolder.objectPropertyDescriptor.values));
 					break;
 				case 'List':
-					var oPropDesc = propertyHolder.objectPropertyDescriptor,
-					label = propertyHolder.properyName || typeDescriptor.innerTypes[0].generalTypes[0];
-					propHtml = ''
-					+'<formation-list label="'+label+'" inner-type-name="'+typeDescriptor.innerTypes[0].generalTypes[0]+'" level="'+level+'">';
-					// now resolve inner types
-					var valueTyped = {
+					var 
+						label = propertyHolder.properyName || typeDescriptor.innerTypes[0].generalTypes[0],
+						valueTyped = {
 							objDescriptor: objDescriptor, 
 							propertyHolder: typeDescriptor.innerTypes[0], 
 							type: typeDescriptor.innerTypes[0].generalTypes[0], 
@@ -69,22 +55,15 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 							outerType: type
 						};
 					_evaluate(valueTyped, {level: level+1}).then(function(innerHtml){
-						propHtml += innerHtml+'</formation-list>';
-						deferred.resolve(propHtml);
+						deferred.resolve(
+							fUtils.List(level, label, typeDescriptor.innerTypes[0].generalTypes[0], innerHtml)
+						);
 					});
 					break;
 				case 'Map':
-					var oPropDesc = propertyHolder.objectPropertyDescriptor || {mapKeyLabel: 'Key', mapValueLabel: 'Value' };
-					var label = propertyHolder.properyName || '';
-
-					propHtml = ''
-					+'<formation-map outer-domain="'+objDescriptor.objectName+'" label="'+label+'" '
-					+'key-label="'+oPropDesc.mapKeyLabel+'" value-label="'+oPropDesc.mapValueLabel+'" '
-					+' key-domain="'+typeDescriptor.innerTypes[0].generalTypes[0]+'" value-domain="'+typeDescriptor.innerTypes[1].generalTypes[0]+'" '
-					+'level="'+level+'">';
-					
-					// resolve inner types
 					var 
+						oPropDesc = propertyHolder.objectPropertyDescriptor || {mapKeyLabel: 'Key', mapValueLabel: 'Value' },
+						label = propertyHolder.properyName || '',
 						innerTypeProms = [],
 						keyTyped = {
 							objDescriptor: objDescriptor, 
@@ -104,31 +83,33 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 						valueProm = _evaluate(valueTyped, {level: level+1});
 
 					innerTypeProms.push(keyProm, valueProm);
-					$q.all(innerTypeProms).then(function(innerHtmls){
-							 propHtml+= '<div name="keyInputEle">'+innerHtmls[0]+'</div>';
-							 propHtml+= '<div name="valueInputEle">'+innerHtmls[1]+'</div></formation-map>';
-						deferred.resolve(propHtml);
+					$q.all(innerTypeProms).then(function(innerHtml){
+						deferred.resolve(
+							fUtils.Map(level, label, 
+								oPropDesc.mapKeyLabel, typeDescriptor.innerTypes[0].generalTypes[0], innerHtml[0], 
+								oPropDesc.mapValueLabel, typeDescriptor.innerTypes[1].generalTypes[0], innerHtml[1])
+						);
 					});
 					break;
 				case 'Interface':
 					helper.typesForCategory(propertyHolder.objectPropertyDescriptor.typeCategory).then(function(types){
 						var classes = [], names = []; 
 						_.each(types, function(ele, i, list){ names.push(ele.objectName); classes.push(ele.className); });
-						classes = classes.join();
-						names = names.join();
-						propHtml = ''
-						+'<formation-interface label="'+propertyHolder.properyName+'" names="'+names+'" types="'+classes+'" level="'+level+'">'
-						+'</formation-interface>';
-						deferred.resolve(propHtml);
+						deferred.resolve(
+							fUtils.Interface(level, propertyHolder.properyName, names, classes)
+						);
+					});
+					break;
+				case 'Object':
+					helper.all().then(function(data){
+						var label = propertyHolder.properyName || '';
+						deferred.resolve(fUtils.Object(level, label, data, data));
 					});
 					break;
 				default:
 					var label = propertyHolder.properyName || type;
 					label = fUtils.labelFromClass(label);
-					propHtml += ''
-					+'<formation-nested-type nested-type-name="'+label+'" label="'+label+'" nested-type-class="'+type+'" level="'+level+'">'
-					+'</formation-nested-type>';
-					deferred.resolve(propHtml);
+					deferred.resolve(fUtils.Nested(level, label, label, type));
 					break;
 			}
 		});
@@ -192,6 +173,8 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 						level = parseInt(options.level) + 1,
 						$containers = $field.find('.formation-field-container.formation-'+innerType.replace(/\./g, '-')+'.formation-level-'+level),
 						proms = [];
+
+					console.log($containers, innerType);
 					
 					$containers.each(function(i, elm){
 						var $container = $(elm);
@@ -224,13 +207,11 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 						deferred.resolve(obj);
 						return; 
 					}
-
 					var _numProps = function(cObj){
 						var count = 0;
 						for(var k in cObj){if(cObj.hasOwnProperty(k)) count++;}
 						return count;
 					};
-
 					var _processKeyValuePair = function($kElm, $vElm, $valueContainers, options){
 						if($kElm.is(':visible') && $vElm.is(':visible')){
 							_processContainer($kElm, options).then(function(keyItem){
@@ -243,7 +224,6 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 							});
 						}
 					};
-
 					var _processKeyValueContainers = function($keyContainers, $valueContainers){
 						var i = 0, op = {level: level, wrapped: false};
 						while(i < $keyContainers.length){
@@ -285,7 +265,31 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 						});
 						deferred.resolve(obj);
 					});
-
+					break;
+				case 'Object':
+					obj.value = {};
+					obj.label = fUtils.simpleClassFromClass($field.data('inner-type'));
+					var
+						level = parseInt(options.level),
+						$containers = $field.find('.formation-field-container.formation-level-'+level),
+						proms = [];
+					$containers.each(function(i, elm){
+						var $container = $(elm);
+						if($container.is(':visible')){
+							var op = {level: level, wrapped: options.wrapped};
+							proms.push(_processContainer($container, op));
+						}
+					});
+					$q.all(proms).then(function(ar){
+						ar.forEach(function(item){
+							if(fUtils.simpletons.indexOf(obj.label) == -1){
+								obj.value[item.label] = item.value;
+							}else{
+								obj.value = item.value;
+							}
+						});
+						deferred.resolve(obj);
+					});
 					break;
 				default:
 					obj.value = {};
@@ -327,46 +331,42 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 				deferred.resolve(_unknown());
 				return;
 			}
-			var construct = constructCache.get(domain);
-			if(angular.isDefined(construct)){
-				console.debug('Serving form for ['+domain+'] from cache');
-				deferred.resolve(construct);
-			}else{
-				helper.describe(domain).then(function(objDescriptor){
-					var formHtml = [], proms = [];
-					
-					objDescriptor.propertyHolders.forEach(function(propertyHolder, index){
-						var typed = {
-								objDescriptor: objDescriptor, 
-								propertyHolder: propertyHolder, 
-								type: propertyHolder.propertyGeneralType, 
-								typeDescriptor: propertyHolder.propertyTypeDescriptor, 
-								outerType: 'NONE',
-							},
+			var
+				ops = {};
+				ops.level = options ? options.level : 0;
 
-						ops = {};
-						ops.level = options ? options.level : 0;
-
-						var evalPromise = _evaluate(typed, ops)
-						.then(function(propHtml){
-							formHtml.push(propHtml);
-						});
-						proms.push(evalPromise);
-					});
-
-					$q.all(proms).then(function(){
-						var construct = {
-							descriptor: objDescriptor,
-							form: formHtml.join('')
-						};
-						deferred.resolve(construct);
-
-						//console.debug('Caching form for ['+domain+']');
-						//constructCache.put(domain, construct);
-					});
-
+			if(fUtils.simpletons.indexOf(domain) > -1){
+				helper.all().then(function(data){
+					var construct = { form: fUtils.buildSimpleType(domain, ops.level, data) };
+					deferred.resolve(construct);
 				});
+				return;
 			}
+			helper.describe(domain).then(function(objDescriptor){
+				var formHtml = [], proms = [];
+				objDescriptor.propertyHolders.forEach(function(propertyHolder, index){
+					var typed = {
+							objDescriptor: objDescriptor, 
+							propertyHolder: propertyHolder, 
+							type: propertyHolder.propertyGeneralType, 
+							typeDescriptor: propertyHolder.propertyTypeDescriptor, 
+							outerType: 'NONE',
+						},
+						evalPromise = _evaluate(typed, ops)
+							.then(function(propHtml){
+								formHtml.push(propHtml);
+							});
+					proms.push(evalPromise);
+				});
+				$q.all(proms).then(function(){
+					var construct = {
+						descriptor: objDescriptor,
+						form: formHtml.join('')
+					};
+					deferred.resolve(construct);
+				});
+
+			});
 		});
 		return deferred.promise;
 	};
@@ -391,7 +391,6 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 
 	helper.describe = function(domain){
 		var deferred = $q.defer();
-
 		$timeout(function(){
 			if(angular.isUndefined(domain) || domain == 'undefined'){
 				deferred.reject();
@@ -443,9 +442,10 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 				deferred.resolve(all);
 			}else{
 				$http.get('http://localhost:8080/formation/list').then(function(data, status, headers, config){
-					console.log('Got formation object list:', data.data);
-					deferred.resolve(data.data);
-					objListCache.put('objects', data.data);
+					var all = data.data.concat(fUtils.simpletons).sort();
+					console.log('Got formation object list:', all);
+					deferred.resolve(all);
+					objListCache.put('objects', all);
 		  	});
 			}
 		});
@@ -455,8 +455,6 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 	helper.forget = function(){
 		console.debug('Formation forgetting from objDescriptorCache', objDescriptorCache.info());
 		objDescriptorCache.removeAll();
-		console.debug('Formation forgetting from constructCache', constructCache.info());
-		constructCache.removeAll();
 	};
 
 	return helper;

@@ -35,7 +35,7 @@ angular.module('ngFormation')
 				//***********************************************************************
 					if(scope.childScopes.length > 0){
 						console.debug('Clearning old directive model', scope.childScopes);
-						iElm.find('div#fcontainer').empty();
+						iElm.find('div#fcontainer').empty().off();
 						scope.childScopes.forEach(function(cScope, i){
 							cScope.$destroy();
 						});
@@ -106,11 +106,9 @@ angular.module('ngFormation')
 								})
 								.on('click', '.formation-interface-type-btn-add', function(event){
 									var 
-										$interfaceTypePicker = $(event.target.previousSibling).find('.formation-interface-type-picker'),
-										interfaceType = $interfaceTypePicker.val()
+										$interfaceTypePickerContainer = $(event.target.previousSibling).find('.formation-interface-type-picker-container').first(),
+										interfaceType = $interfaceTypePickerContainer.find('.formation-interface-type-picker').val()
 										level = parseInt($(event.target.previousSibling).data('level'));
-
-										console.log(event, level);
 
 									f.build(interfaceType, {level: level+1}).then(function(ifaceConstruct){
 										$compile(ifaceConstruct.form)(scope.$new(), function(ifaceClone, ifaceScope){
@@ -123,19 +121,46 @@ angular.module('ngFormation')
 												.append(ifaceClone)
 												.addClass('formation-'+interfaceType.replace(/\./g, '-'))
 												.addClass('formation-level-'+level);
-											$interfaceTypePicker.hide();
+											$interfaceTypePickerContainer.hide();
 											$interfaceTypeAddBtn = $(event.target).hide();
 											$(event.target.previousSibling).find('.formation-interface-type-container')
 												.fadeIn('fast')
 												.on('click', '.formation-interface-type-btn-remove', function(event){
 													$(event.delegateTarget).hide();
+													$interfaceTypePickerContainer.show();
 													$interfaceTypeAddBtn.show();
-													$interfaceTypePicker.show();
 												});
 										});
 									});
+								})
+								.on('click', '.formation-object-type-btn-add', function(event){
+									var 
+										$container = $(event.target.parentElement);
+										type = $container.find('.formation-object-type-picker').first().val(),
+										level = parseInt($(event.target).hide().data('level'));
+
+										console.log($container, type, level, event);
+
+									f.build(type, {level: level}).then(function(gConstruct){
+										$compile(gConstruct.form)(scope.$new(), function(gClone, gScope){
+											scope.childScopes.push(gScope);
+											$container.find('.formation-field')
+												.first()
+												.data('inner-type', f.utils.classFromLabel(type));
+											$container.find('.formation-object-type').first()
+												.empty()
+												.append(gClone);
+											$container.find('.formation-object-type-picker-container').first().hide();
+											$container.find('.formation-object-type-btn-remove').first()
+												.on('click', function(event){
+													$container.find('.formation-object-container').first().hide();
+													$container.find('.formation-object-type-picker-container').first().show();
+													$container.find('.formation-object-type-btn-add').show();
+												});
+											$container.find('.formation-object-container').first().show();
+										});
+									});
 								});
-							cloneScope.serializers = [];
 							scope.childScopes.push(cloneScope);
 							console.timeEnd('formation-compile-timer');
 						});
@@ -332,7 +357,6 @@ angular.module('ngFormation')
 		name: 'formation-map',
 		scope: {
 			label: '@',
-			outerDomain: '@',
 			keyLabel: '@',
 			keyDomain: '@',
 			valueLabel: '@',
@@ -531,7 +555,7 @@ angular.module('ngFormation')
 				+'<label class="col-lg-2 control-label" ng-if="label">{{label}}</label>'
 					+'<div class="col-lg-10">'
 						+'<div class="formation-interface-grouping-container">'
-							+'<div class="form-group">'
+							+'<div class="form-group formation-interface-type-picker-container">'
 								+'<div class="col-lg-10">'
 									+'<select class="form-control formation-interface-type-picker">'
 										+'<option ng-repeat="(k, v) in model.names" value="{{model.types[k]}}">{{v}}</option>'
@@ -552,7 +576,7 @@ angular.module('ngFormation')
 							+'</div>'
 						+'</div>'
 						+'<button type="button" class="btn btn-xs btn-primary formation-interface-type-btn-add">'
-							+'<span class="glyphicon glyphicon-plus-sign"></span> Add'
+							+'<span class="glyphicon glyphicon-asterisk"></span> Create'
 						+'</button>'
 					+'</div>'
 				+'</div>'
@@ -567,7 +591,6 @@ angular.module('ngFormation')
         post: function(scope, iElm, iAttrs){
 					iElm.find('div.formation-interface-type-container').hide();
 					scope.model = { types: scope.types.split(','), names: scope.names.split(',') };
-				//	scope.model.formationNestedTypeClass = 'formation-'+scope.nestedTypeClass.replace(/\./g, '-');
 					scope.model.formationLevel = 'formation-level-'+scope.level;
 
 					iElm.find('.formation-field').first()
@@ -575,7 +598,68 @@ angular.module('ngFormation')
 						.data('type', 'Interface');
 
 					iElm.find('.formation-interface-grouping-container').first()
-						//.data('type', scope.nestedTypeClass)
+						.data('level', scope.level)
+        }
+      };
+		},
+	};
+}])
+
+.directive('formationObject', ['formationService', '$compile', function(f, $compile){
+	return {
+		name: 'formation-interface',
+		scope: {
+			label: '@',
+			types: '@',
+			names: '@',
+			level: '@'
+		},
+		template: ''
+			+'<div class="form-group formation-Object formation-field-container" ng-class=[model.formationLevel]>'
+				+'<label class="col-lg-2 control-label" ng-if="label">{{label}}</label>'
+					+'<div class="col-lg-10">'
+
+						+'<div class="form-group formation-object-type-picker-container">'
+							+'<div class="col-lg-10">'
+								+'<select class="form-control formation-object-type-picker">'
+									+'<option ng-repeat="(k, v) in model.names" value="{{model.types[k]}}">{{v}}</option>'
+								+'</select>'
+							+'</div>'
+						+'</div>'
+
+						+'<div class="formation-object-container formation-field">'
+							+'<div class="well well-sm">'
+								+'<div class="row">'
+									+'<div class="col-lg-12">'
+										+'<div class="formation-object-type"></div>'
+									+'</div>'
+								+'</div>'
+							+'</div>'
+							+'<button type="button" class="btn btn-xs btn-danger formation-object-type-btn-remove">'
+								+'<span class="glyphicon glyphicon-minus-sign"></span> Remove'
+							+'</button>'
+						+'</div>'
+
+						+'<button type="button" class="btn btn-xs btn-primary formation-object-type-btn-add">'
+							+'<span class="glyphicon glyphicon-asterisk"></span> Create'
+						+'</button>'
+
+					+'</div>'
+				+'</div>'
+			+'</div>',
+		replace: true,
+		transclude: true,
+		compile: function(tElm, tAttrs){
+			tElm.find('div.formation-interface-type-container').prop('id',  uniqueId())
+			return {
+				pre: function(scope, iElm, iAttrs){},
+        post: function(scope, iElm, iAttrs){
+					scope.model = { types: scope.types.split(','), names: scope.names.split(',') };
+					scope.model.formationLevel = 'formation-level-'+scope.level;
+
+					iElm.find('div.formation-object-container').first().hide();
+					iElm.find('.formation-field').first().data('type', 'Object');
+					iElm.find('button.formation-object-type-btn-add').first()
 						.data('level', scope.level)
         }
       };
