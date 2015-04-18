@@ -37,7 +37,7 @@ module.exports = function(config) {
       'node_modules/htmlparser/lib/htmlparser.js',
 
       'src/scripts/formation-helper.js',
-      'src/scripts/formation-parts.js',
+      'src/scripts/formation-directives.js',
       'src/scripts/formation-utils.js',
       'unit-test/spec/**/*.js'
     ],

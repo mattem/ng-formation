@@ -7,7 +7,7 @@
   "description": "AngularJS directive to accompany the formation-spring-boot-starter",
   "main": [
     "src/scripts/formation-helper.js",
-    "src/scripts/formation-parts.js",
+    "src/scripts/formation-directives.js",
     "src/scripts/formation-utils.js"
   ],
   "moduleType": [
