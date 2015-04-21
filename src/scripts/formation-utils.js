@@ -17,7 +17,7 @@ angular.module('ngFormation')
 		_buildSimpleType = function(type, level, allTypes){
 			switch(type){
 				case 'String':
-					return _String(level, 'String', 'String');
+					return _String(level, 'String', 'String', 'text');
 					break;
 				case 'Number':
 					return _Number(level, 'Number', '0');
@@ -37,8 +37,10 @@ angular.module('ngFormation')
 			}
 		},
 		_simpletons = ['String', 'Number', 'Boolean', 'List', 'Map', 'Object'],
-		_String = function(level, label, placeholder){
-			return '<formation-string label="'+label+'" placeholder="'+placeholder+'" level="'+level+'"></formation-string>';
+		_String = function(level, label, placeholder, fieldType, required){
+			return ''
+				+'<formation-string label="'+label+'" placeholder="'+placeholder+'" level="'+level+'" field-type="'+fieldType+'" required="'+required+'">'
+				+'</formation-string>';
 		},
 		_Number = function(level, label, placeholder){
 			return '<formation-number label="'+label+'" placeholder="'+placeholder+'" level="'+level+'"></formation-number>';

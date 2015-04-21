@@ -5,13 +5,13 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 	var objDescriptorCache, objListCache, categoryCache;
 	(function(){
 		objDescriptorCache = $cacheFactory('objDescriptorCache', {capacity: 10});
-		objListCache = $cacheFactory('objListCache', {capacity:1});
+		objListCache = $cacheFactory('objListCache');
 		categoryCache = $cacheFactory('categoryCache', {capacity:20});
 	})();
 
 	var _unknown = function(objDescriptor, domain){
 		return {
-			form: fUtils.Unknown(),
+			form: fUtils.Unknown(domain),
 			objDescriptor: objDescriptor
 		};
 	};
@@ -30,7 +30,7 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 			console.debug('Evaluating property', propertyHolder, 'Using type ['+type+']');
 			switch(type){
 				case 'String':
-					deferred.resolve(fUtils.String(level, propertyHolder.properyName, propertyHolder.properyName));
+					deferred.resolve(fUtils.String(level, propertyHolder.properyName, propertyHolder.properyName, propertyHolder.fieldType, propertyHolder.required));
 					break;
 				case 'Boolean':
 					deferred.resolve(fUtils.Boolean(level, propertyHolder.properyName));
@@ -101,7 +101,7 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 					});
 					break;
 				case 'Object':
-					helper.all().then(function(data){
+					helper.list().then(function(data){
 						var label = propertyHolder.properyName || '';
 						deferred.resolve(fUtils.Object(level, label, data, data));
 					});
@@ -129,11 +129,11 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 		return d.promise;
 	};
 
-	var _defaultOptions = {wrapped: true};
+	var _defaultSerializeOptions = {wrapped: true};
 	var _serializeField = function($field, options){
 		var deferred = $q.defer();
 		$timeout(function(){
-			options = $.extend({}, _defaultOptions, options);
+			options = $.extend({}, _defaultSerializeOptions, options);
 			
 			console.debug('Starting to process ['+$field[0]+'] Using options', options);
 
@@ -323,7 +323,9 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 		return deferred.promise;
 	};
 
-	var helper = {utils: fUtils};
+	var helper = {utils: fUtils},
+	_defaultBuildOptions = {level:0, view:''};
+
 	helper.build = function(domain, options){
 		var deferred = $q.defer();
 		$timeout(function(){
@@ -331,12 +333,10 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 				deferred.resolve(_unknown());
 				return;
 			}
-			var
-				ops = {};
-				ops.level = options ? options.level : 0;
+			var ops = $.extend({}, _defaultBuildOptions, options);
 
 			if(fUtils.simpletons.indexOf(domain) > -1){
-				helper.all().then(function(data){
+				helper.list().then(function(data){
 					var construct = { form: fUtils.buildSimpleType(domain, ops.level, data) };
 					deferred.resolve(construct);
 				});
@@ -344,7 +344,11 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 			}
 			helper.describe(domain).then(function(objDescriptor){
 				var formHtml = [], proms = [];
+
 				objDescriptor.propertyHolders.forEach(function(propertyHolder, index){
+					if(ops.view !== '' && propertyHolder.views.indexOf(ops.view) === -1){
+						return;	
+					}
 					var typed = {
 							objDescriptor: objDescriptor, 
 							propertyHolder: propertyHolder, 
@@ -366,6 +370,8 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 					deferred.resolve(construct);
 				});
 
+			}, function(domain){
+				deferred.resolve(_unknown({}, domain));
 			});
 		});
 		return deferred.promise;
@@ -403,8 +409,12 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 			}else{
 				$http.get('http://localhost:8080/formation/describe/?object='+domain).then(function(data, status, headers, config){
 					console.debug(domain+' described as', data.data);
-					deferred.resolve(data.data); 
-					objDescriptorCache.put(domain, data.data);
+					if(angular.isDefined(data.data) && data.data !== ''){
+						deferred.resolve(data.data); 
+						objDescriptorCache.put(domain, data.data);
+					}else{
+						deferred.reject(domain);
+					}
 				});
 			}
 		});
@@ -433,20 +443,38 @@ function(fUtils, $http, $cacheFactory, $q, $timeout){
 		return deferred.promise;
 	};
 
+	helper.list = function(){
+		var deferred = $q.defer();
+		$timeout(function(){
+			var list = objListCache.get('list');
+			if(angular.isDefined(list)){
+				console.log('Found list in cache as', list);
+				deferred.resolve(list);
+			}else{
+				$http.get('http://localhost:8080/formation/list').then(function(data, status, headers, config){
+					var list = data.data.concat(fUtils.simpletons).sort();
+					console.log('Got formation object list:', list);
+					deferred.resolve(list);
+					objListCache.put('list', list);
+		  		});
+			}
+		});
+		return deferred.promise;
+	};
+
 	helper.all = function(){
 		var deferred = $q.defer();
 		$timeout(function(){
-			var all = objListCache.get('objects');
+			var all = objListCache.get('all');
 			if(angular.isDefined(all)){
 				console.log('Found all in cache as', all);
 				deferred.resolve(all);
 			}else{
-				$http.get('http://localhost:8080/formation/list').then(function(data, status, headers, config){
-					var all = data.data.concat(fUtils.simpletons).sort();
-					console.log('Got formation object list:', all);
-					deferred.resolve(all);
-					objListCache.put('objects', all);
-		  	});
+				$http.get('http://localhost:8080/formation/all').then(function(data, status, headers, config){;
+					console.log('Got formation object all:', data.data);
+					deferred.resolve(data.data);
+					objListCache.put('all', data.data);
+		  		});
 			}
 		});
 		return deferred.promise;

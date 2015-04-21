@@ -4,6 +4,7 @@ angular.module('ngFormation')
 		name: 'formation',
 		scope: {
 			domain: '=',
+			view: '=?',
 			value: '=?',
 			debug: '=?'
 		},
@@ -43,8 +44,12 @@ angular.module('ngFormation')
 						scope.objDescriptor = undefined;
 					}
 				//************************************************************************
+					var options = {};
+					if(angular.isDefined(scope.view)){
+						options.view = scope.view;
+					}
 
-					f.build(newValue).then(function(construct){
+					f.build(newValue, options).then(function(construct){
 						var objDescriptor = construct.descriptor, formHtml = construct.form;
 
 						scope.objDescriptor = objDescriptor;
@@ -139,8 +144,6 @@ angular.module('ngFormation')
 										type = $container.find('.formation-object-type-picker').first().val(),
 										level = parseInt($(event.target).hide().data('level'));
 
-										console.log($container, type, level, event);
-
 									f.build(type, {level: level}).then(function(gConstruct){
 										$compile(gConstruct.form)(scope.$new(), function(gClone, gScope){
 											scope.childScopes.push(gScope);
@@ -172,15 +175,20 @@ angular.module('ngFormation')
 		},
 		controller: function($scope, $element, $attrs, $transclude) {
 			$scope.onSubmitClick = function(){
-				console.log('********** Starting serialize form **********');
-				console.time('formation-serialize-timer');
+				console.log($element);
 
-				f.serialize($element.find('.formation-form-container'), {level: 0}).then(function(obj){
-					console.log(obj);
-					$scope.value = obj;
-					console.timeEnd('formation-serialize-timer');
-					console.log('********** Done serialize form **********');
-				});
+				if($element.hasClass('ng-valid')){
+					console.log('********** Starting serialize form **********');
+					console.time('formation-serialize-timer');
+					f.serialize($element.find('.formation-form-container'), {level: 0}).then(function(obj){
+						console.log(obj);
+						$scope.value = obj;
+						console.timeEnd('formation-serialize-timer');
+						console.log('********** Done serialize form **********');
+					});
+				}else{
+					console.error('********** Not serializing form as it has failed validation **********')
+				}
 			};
 		},
 	};
@@ -212,13 +220,16 @@ angular.module('ngFormation')
 		scope: {
 			label: '@',
 			placeholder: '@?',
-			level: '@'
+			level: '@',
+			fieldType: '@?',
+			required: '@?'
 		},
 		template: ''
 			+'<div class="form-group formation-field-container formation-String" ng-class=[model.formationLevel]>'
 				+'<label class="col-lg-2 control-label" ng-if="label !== \'undefined\'">{{label}}</label>'
 				+'<div class="col-lg-10">'
-					+'<input type="text" class="form-control formation-field" placeholder="{{placeholder}}" ng-model="value">'
+					+'<input type="{{fieldType}}" class="form-control formation-field" placeholder="{{placeholder}}">'
+					+'<textarea rows="4" cols="50" class="form-control formation-field"></textarea>'
 				+'</div>'
 			+'</div>',
 		replace: true,
@@ -226,12 +237,22 @@ angular.module('ngFormation')
 			scope.model = {};
 			scope.model.formationLevel = 'formation-level-'+scope.level;
 			scope.uniqueId = uniqueId();
-			iElm.find('input.form-control.formation-field')
+			if(angular.isUndefined(scope.fieldType)) scope.fieldType = 'text';
+			iElm.find('.form-control.formation-field')
 				.data('type', 'String')
 				.data('label', scope.label);
 			iElm.find('.formation-field-container')
 				.data('type', 'String')
 				.data('level', scope.level);
+
+			var required = (scope.required === 'true');
+			if(scope.fieldType === 'textarea'){
+				iElm.find('input.formation-field').hide();
+				if(required) iElm.find('textarea.formation-field').attr('required', 'true');
+			}else{
+				iElm.find('textarea.formation-field').hide();
+				if(required) iElm.find('input.formation-field').attr('required', '');
+			}
 		}
 	};
 }])
