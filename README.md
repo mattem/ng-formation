@@ -13,9 +13,7 @@ Having the backend processing would be nothing without something to render the f
 
 Install using bower:
 
-```javascript
-bower install ng-formation
-```
+Soon!
 
 Add it to your applications angular module as a dependancy: 
 
